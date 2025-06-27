@@ -24,7 +24,8 @@ local_time_fuse = pytz.timezone("America/Sao_Paulo")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def get_msg_attachments(attachs, attachments):
+def get_msg_attachments(attachments):
+    attachs = []
     if attachments:
         for att in attachments:
             attachs.append(att)
@@ -39,6 +40,12 @@ def save_and_create_files(attachs):
                 f.write(att.payload)
             files.append(('files', (att.filename, open(file_path, 'rb'), att.content_type)))
     return files
+
+def message_extract(msg):
+    message = msg[:msg.find(".brevosend.com>")]
+    pattern = r"On \w{3}, \w+ \d{1,2}, \d{4} at \d{1,2}:\d{2}.*"
+    message = re.sub(pattern, '', message)
+    return message
 
 def internal_code_extract(html):
     match = '<p style="color:white;display:none">'
@@ -58,24 +65,27 @@ def process_mailbox(msg):
     date = date.astimezone(local_time_fuse)
     date = date.strftime("%d-%m-%Y %H:%M:%S")
 
+    response_from = msg.from_
+    response_subject = msg.subject
+    response_message = message_extract(msg.text)
     internal_code = internal_code_extract(msg.html)
 
-    logging.info(f"UID: {msg.uid}")
-    logging.info(f"SUBJECT: {msg.subject}")
-    logging.info(f"FROM: {msg.from_}")
-    logging.info(f"DATE: {date}")
-    logging.info(f"BODY: {msg.text}")
-    logging.info(f"htmlBODY: {msg.html}")
-    logging.info(f"Código Interno: {internal_code}")
+    # logging.info(f"UID: {msg.uid}")
+    # logging.info(f"SUBJECT: {msg.subject}")
+    # logging.info(f"FROM: {msg.from_}")
+    # logging.info(f"DATE: {date}")
+    # logging.info(f"BODY: {msg.text}")
+    # logging.info(f"htmlBODY: {msg.html}")
+    # logging.info(f"Código Interno: {internal_code}")
+    # logging.info(f"RESPONSE MESSAGE: {response_message}")
 
-    attachs = []
+    files = []
     if msg.attachments:
-        attachs = get_msg_attachments(attachs, msg.attachments)
-
-    if attachs:
-        logging.info(f"ATTACH: {', '.join([attach.filename for attach in attachs])}")
-        logging.info("===================================\n\n")
-        files = save_and_create_files(attachs)
+        attachs = get_msg_attachments(msg.attachments)
+        if attachs:
+            logging.info(f"ATTACH: {', '.join([attach.filename for attach in attachs])}")
+            logging.info("===================================\n\n")
+            files = save_and_create_files(attachs)
 
     if internal_code:
         headers = {
@@ -83,6 +93,9 @@ def process_mailbox(msg):
         }
         payload = {
             "internal_code": internal_code,
+            "message": response_message,
+            "from": response_from,
+            "subject": response_subject,
         }
         response = requests.post(NNHOOK_URL, headers=headers, data=payload, files=files)
         if response.status_code != 200:
