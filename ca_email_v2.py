@@ -5,10 +5,13 @@ import os
 import requests
 import tempfile
 import time
+import asyncio
 from imap_tools import MailBox, AND
 from datetime import datetime
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from pprint import pprint
+from db import get_session
 
 load_dotenv()
 
@@ -46,7 +49,7 @@ def message_extract(msg):
     return message
 
 def internal_code_extract(html):
-    match = '<p style="color:white;display:none">'
+    match = '<p class="CONTAAGIL-UUID" style="color:white;display:none">'
     start_point = html.find(match)+len(match)
     code = html[start_point:]
     end_point = code.find("</p>")
@@ -57,25 +60,33 @@ def remove_html_tags(text):
     soup = BeautifulSoup(text, "html.parser")
     return soup.get_text()
 
-def process_mailbox(msg):
+async def cod_lead_from_email(from_):
+    async with get_session() as db:
+        sql = "SELECT CodLead FROM Leads WHERE Email = %s"
+        response = await db.fetchone(sql, (from_, ))
+        if not response:
+            return None
+        return response["CodLead"]
+
+async def process_mailbox(msg):
     date = re.sub(r"\s*\(.*?\)\s*", "", msg.date_str)
     date = datetime.strptime(date, "%a, %d %b %Y %H:%M:%S %z")
     date = date.astimezone(local_time_fuse)
     date = date.strftime("%d-%m-%Y %H:%M:%S")
 
-    response_from = msg.from_
+    cod_lead = await cod_lead_from_email(msg.from_)
+    response_from_email = msg.from_
     response_subject = msg.subject
     response_message = message_extract(msg.text)
-    internal_code = internal_code_extract(msg.html)
 
     # logging.info(f"UID: {msg.uid}")
-    # logging.info(f"SUBJECT: {msg.subject}")
-    # logging.info(f"FROM: {msg.from_}")
+    # logging.info(f"SUBJECT: {response_subject}")
+    # logging.info(f"FROM: {response_from_email}")
     # logging.info(f"DATE: {date}")
     # logging.info(f"BODY: {msg.text}")
     # logging.info(f"htmlBODY: {msg.html}")
     # logging.info(f"Código Interno: {internal_code}")
-    # logging.info(f"RESPONSE MESSAGE: {response_message}")
+    logging.info(f"RESPONSE MESSAGE: {response_message}")
 
     files = []
     if msg.attachments:
@@ -85,14 +96,14 @@ def process_mailbox(msg):
             # logging.info("===================================\n\n")
             files = save_and_create_files(attachs)
 
-    if internal_code:
+    if cod_lead:
         headers = {
             "Authorization": F"Bearer {N8NAPI_KEY}",
         }
         payload = {
-            "internal_code": internal_code,
+            "cod_lead": cod_lead,
             "message": response_message,
-            "from": response_from,
+            "from_email": response_from_email,
             "subject": response_subject,
         }
         response = requests.post(NNHOOK_URL, headers=headers, data=payload, files=files)
@@ -101,7 +112,7 @@ def process_mailbox(msg):
 
 
 
-def main():
+async def main():
     max_retries = 50
     delay = 5
 
@@ -113,7 +124,7 @@ def main():
                     try:
                         attempt = 0
                         for msg in mb.fetch(AND(seen=False), mark_seen=True):
-                            process_mailbox(msg)
+                            await process_mailbox(msg)
                     except Exception as e:
                         logging.error(f"Ocorreu um erro: {e}")
                         break
@@ -122,11 +133,11 @@ def main():
             logging.warning(f"Attempt {attempt}/{max_retries} Error: {e}")
             if attempt < max_retries:
                 logging.info(f"Trying in {delay} seconds...")
-                time.sleep(delay)
+                await asyncio.sleep(delay)
             else:
                 logging.error("Max tries. Out...")
 
 if __name__ == "__main__":
-    version = "v1.1"
+    version = "v1.2"
     logging.info(f"[CA EMAIL Version {version} starded.]")
-    main()
+    asyncio.run(main())
