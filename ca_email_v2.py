@@ -20,8 +20,6 @@ NNHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
 N8NAPI_KEY = os.getenv("N8N_API_KEY")
 
 local_time_fuse = pytz.timezone("America/Sao_Paulo")
-
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_msg_attachments(attachments):
@@ -83,8 +81,8 @@ def process_mailbox(msg):
     if msg.attachments:
         attachs = get_msg_attachments(msg.attachments)
         if attachs:
-            logging.info(f"ATTACH: {', '.join([attach.filename for attach in attachs])}")
-            logging.info("===================================\n\n")
+            # logging.info(f"ATTACH: {', '.join([attach.filename for attach in attachs])}")
+            # logging.info("===================================\n\n")
             files = save_and_create_files(attachs)
 
     if internal_code:
@@ -101,6 +99,8 @@ def process_mailbox(msg):
         if response.status_code != 200:
             logging.error(response.text)
 
+
+
 def main():
     max_retries = 50
     delay = 5
@@ -111,10 +111,12 @@ def main():
             with MailBox(EMAIL_HOST).login(EMAIL_USER, EMAIL_PASS, EMAIL_PATH) as mb:
                 while True:
                     try:
+                        attempt = 0
                         for msg in mb.fetch(AND(seen=False), mark_seen=True):
                             process_mailbox(msg)
                     except Exception as e:
                         logging.error(f"Ocorreu um erro: {e}")
+                        break
         except Exception as e:
             attempt += 1
             logging.warning(f"Attempt {attempt}/{max_retries} Error: {e}")
@@ -124,8 +126,7 @@ def main():
             else:
                 logging.error("Max tries. Out...")
 
-
 if __name__ == "__main__":
-    version = "v1.0"
+    version = "v1.1"
     logging.info(f"[CA EMAIL Version {version} starded.]")
     main()
