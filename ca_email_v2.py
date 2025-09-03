@@ -76,7 +76,7 @@ async def process_mailbox(msg):
 
     cod_lead = await cod_lead_from_email(msg.from_)
     response_from_email = msg.from_
-    response_to_email = msg.to[0][1]
+    response_to_email = msg.to[0]
     response_subject = msg.subject
     response_message = message_extract(msg.text)
 
