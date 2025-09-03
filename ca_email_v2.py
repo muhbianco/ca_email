@@ -86,7 +86,7 @@ async def process_mailbox(msg):
     # logging.info(f"BODY: {msg.text}")
     # logging.info(f"htmlBODY: {msg.html}")
     # logging.info(f"Código Interno: {internal_code}")
-    logging.info(f"RESPONSE MESSAGE: {response_message}")
+    # logging.info(f"RESPONSE MESSAGE: {response_message}")
 
     files = []
     if msg.attachments:
@@ -105,6 +105,8 @@ async def process_mailbox(msg):
             "message": response_message,
             "from_email": response_from_email,
             "subject": response_subject,
+            "incoming": True,
+            "channel": "email",
         }
         response = requests.post(NNHOOK_URL, headers=headers, data=payload, files=files)
         if response.status_code != 200:
