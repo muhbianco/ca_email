@@ -81,7 +81,7 @@ class CA_EMAIL:
             return False
 
         login_response = await self.response.json()
-        session_token = login_response.get("session_token")
+        session_token = login_response.get("session_token_admin")
         headers = {
             "Session-Token": session_token,
         }
