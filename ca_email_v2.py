@@ -55,6 +55,14 @@ class CA_EMAIL:
         async with aiohttp.ClientSession() as session:
             self.response = await session.post(NNHOOK_URL, headers=headers, json=payload)
 
+        if self.response.status != 200:
+            return False
+
+        message_response = await self.response.json()
+        logging.info(message_response)
+        self.message_id = message_response[0].get("data").get("insertId")
+        return True
+
     async def contaagil_login(self):
         headers = {
             "Session-Token": "",
@@ -70,7 +78,7 @@ class CA_EMAIL:
         await self.contaagil_login()
         if self.response.status != 200:
             logging.error(f"Falha ao obter session_token ContaÁgil")
-            return
+            return False
 
         login_response = await self.response.json()
         session_token = login_response.get("session_token")
@@ -80,8 +88,10 @@ class CA_EMAIL:
         payload = {
             "CodLead": self.cod_lead,
             "saveFile": True,
-            "tipo": "ATTACH_LEAD_MESSAGE"
+            "tipo": "ATTACH_LEAD_MESSAGE",
+            "CodMensagem": self.message_id
         }
+
         async with aiohttp.ClientSession() as session:
             form = aiohttp.FormData()
             for key, value in payload.items():
@@ -94,6 +104,11 @@ class CA_EMAIL:
                     content_type=content_type,
                 )
             self.response = await session.post(f"{CCAGIL_URL}/Upload/index", headers=headers, data=form)
+
+        if self.response.status != 200:
+            return False
+
+        return True
         
 
     def get_msg_attachments(self, attachments):
@@ -110,7 +125,7 @@ class CA_EMAIL:
                 file_path = os.path.join(temp_dir, att.filename)
                 with open(file_path, 'wb') as f:
                     f.write(att.payload)
-                files.append(('files', (att.filename, open(file_path, 'rb'), att.content_type)))
+                files.append(('files[]', (att.filename, open(file_path, 'rb'), att.content_type)))
         return files
 
     def message_extract(self, msg):
@@ -137,7 +152,7 @@ class CA_EMAIL:
             response = await db.fetchone(sql, (from_, ))
             if not response:
                 return None
-            return response["CodLead"]
+        return response["CodLead"]
 
     async def process_mailbox(self, msg):
         date = re.sub(r"\s*\(.*?\)\s*", "", msg.date_str)
@@ -160,14 +175,12 @@ class CA_EMAIL:
             if attachs:
                 self.files = self.save_and_create_files(attachs)
 
-        await self.send_message_to_n8n()
-        if self.response.status != 200:
+        if not await self.send_message_to_n8n():
             logging.error(f"Erro ao enviar mensagem para o N8N")
             await self.log_response_error()
             return
 
-        await self.send_files_to_db()
-        if self.response.status != 200:
+        if not await self.send_files_to_db():
             logging.error(f"Erro ao enviar arquivos para o EP /Upload/index")
             await self.log_response_error()
             return
