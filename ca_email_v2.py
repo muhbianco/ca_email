@@ -59,9 +59,8 @@ class CA_EMAIL:
             return False
 
         message_response = await self.response.json()
-        logging.error(f"message_respo´nse: {message_response}")
         self.message_id = message_response.get("messageId")
-        logging.error(f"message_id: {self.message_id}")
+        logging.info(f"message_id: {self.message_id}")
         return True
 
     async def contaagil_login(self):
@@ -170,36 +169,25 @@ class CA_EMAIL:
         self.response_subject = msg.subject
         self.response_message = self.message_extract(msg.text)
 
-        logging.info(f"01")
-
         if not self.cod_lead:
             return
 
-        try:
-            self.files = []
-            if msg.attachments:
-                attachs = self.get_msg_attachments(msg.attachments)
-                if attachs:
-                    self.files = self.save_and_create_files(attachs)
+        self.files = []
+        if msg.attachments:
+            attachs = self.get_msg_attachments(msg.attachments)
+            if attachs:
+                self.files = self.save_and_create_files(attachs)
 
-            logging.info(f"02")
+        if not await self.send_message_to_n8n():
+            logging.error(f"Erro ao enviar mensagem para o N8N")
+            await self.log_response_error()
+            return
 
-            if not await self.send_message_to_n8n():
-                logging.error(f"Erro ao enviar mensagem para o N8N")
-                await self.log_response_error()
-                return
+        if not await self.send_files_to_db():
+            logging.error(f"Erro ao enviar arquivos para o EP /Upload/index")
+            await self.log_response_error()
+            return
 
-            logging.error("enviou pro n8n")
-
-            if not await self.send_files_to_db():
-                logging.error(f"Erro ao enviar arquivos para o EP /Upload/index")
-                await self.log_response_error()
-                return
-
-            logging.error("enviou pra CA?")
-        except Exception as e:
-            logging.error(f"caiu aqui? {str(e)}")
-            raise e
 
     async def main(self):
         max_retries = 50
@@ -235,6 +223,6 @@ class CA_EMAIL:
                     logging.error("Max tries. Out...")
 
 if __name__ == "__main__":
-    version = "v1.5"
+    version = "v1.6"
     logging.info(f"[CA EMAIL Version {version} starded.]")
     asyncio.run(CA_EMAIL().main())
