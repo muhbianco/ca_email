@@ -59,7 +59,6 @@ class CA_EMAIL:
             return False
 
         message_response = await self.response.json()
-        logging.info(message_response)
         self.message_id = message_response[0].get("data").get("insertId")
         return True
 
@@ -88,7 +87,7 @@ class CA_EMAIL:
         payload = {
             "CodLead": self.cod_lead,
             "saveFile": True,
-            "tipo": "ATTACH_LEAD_MESSAGE",
+            "tipo": "ANEXO_LEAD",
             "CodMensagem": self.message_id
         }
 
@@ -160,7 +159,10 @@ class CA_EMAIL:
         date = date.astimezone(local_time_fuse)
         date = date.strftime("%d-%m-%Y %H:%M:%S")
 
+        logging.info(f"from: {msg.from_}")
+
         self.cod_lead = await self.cod_lead_from_email(msg.from_)
+        logging.info(f"codlead: {self.cod_lead}")
         self.response_from_email = msg.from_
         self.response_to_email = msg.to[0]
         self.response_subject = msg.subject
@@ -193,17 +195,25 @@ class CA_EMAIL:
         while attempt < max_retries:
             try:
                 with MailBox(EMAIL_HOST).login(EMAIL_USER, EMAIL_PASS, EMAIL_PATH) as mb:
+                    logging.info("Conexão IMAP estabelecida com sucesso.")
+                    attempt = 0
+
                     while True:
                         try:
-                            attempt = 0
                             for msg in mb.fetch(AND(seen=False), mark_seen=True):
                                 await self.process_mailbox(msg)
+
+                            mb.client.noop()
+                            await asyncio.sleep(3)
+
                         except Exception as e:
                             logging.error(f"Ocorreu um erro: {e}")
                             break
+
             except Exception as e:
                 attempt += 1
                 logging.warning(f"Attempt {attempt}/{max_retries} Error: {e}")
+
                 if attempt < max_retries:
                     logging.info(f"Trying in {delay} seconds...")
                     await asyncio.sleep(delay)
@@ -211,6 +221,6 @@ class CA_EMAIL:
                     logging.error("Max tries. Out...")
 
 if __name__ == "__main__":
-    version = "v1.3"
+    version = "v1.5"
     logging.info(f"[CA EMAIL Version {version} starded.]")
     asyncio.run(CA_EMAIL().main())
